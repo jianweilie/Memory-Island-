@@ -30,10 +30,10 @@
     background:#1b1f2e; font-family:'Nunito',sans-serif; overflow:hidden;
   }
   .stage{
-    width:min(96vw,760px); aspect-ratio:16/10; position:relative;
-    border-radius:12px; overflow:hidden;
+    width:100vw; height:100vh; position:relative;
+    border-radius:0; overflow:hidden;
     background:linear-gradient(180deg, var(--sky-top), var(--sky-bottom));
-    box-shadow:0 24px 60px rgba(0,0,0,0.5);
+    box-shadow:none;
   }
   @media (max-width:560px){
     .stage{ aspect-ratio:4/5; }
@@ -479,10 +479,12 @@
   // each station = its own floating island. x/y/z = resting position, phase = hover offset
   // (the train visits them in this order, so keep them left-to-right)
   const STATIONS = [
-    { id:'photos',    type:'photos',    tag:'Station 1', title:'Our Photos',      x:-4.8, y: 0.4, z: 0.4, color:0xeab3c2, phase:0.0 },
-    { id:'bucket',    type:'bucket',    tag:'Station 2', title:'Our Bucket List', x:-1.6, y:-0.5, z:-1.4, color:0xa7c7e7, phase:1.6 },
-    { id:'letters',   type:'letters',   tag:'Station 3', title:'Mailbox',         x: 1.6, y: 0.6, z: 1.2, color:0xf6e27a, phase:3.2 },
-    { id:'countdown', type:'countdown', tag:'Station 4', title:'Countdown',       x: 4.8, y:-0.3, z:-1.0, color:0x9bbf8a, phase:4.8 },
+    // size controls how large each floating island appears.
+    // The islands are intentionally different sizes for a more natural "memory world" layout.
+    { id:'photos',    type:'photos',    tag:'Station 1', title:'Our Photos',      x:-5.3, y: 0.4, z: 0.4, color:0xeab3c2, phase:0.0, size:1.22 },
+    { id:'bucket',    type:'bucket',   tag:'Station 2', title:'Our Bucket List', x:-1.8, y:-0.5, z:-1.4, color:0xa7c7e7, phase:1.6, size:1.05 },
+    { id:'letters',   type:'letters',  tag:'Station 3', title:'Mailbox',         x: 1.8, y: 0.6, z: 1.2, color:0xf6e27a, phase:3.2, size:1.42 },
+    { id:'countdown', type:'countdown',tag:'Station 4', title:'Countdown',       x: 5.3, y:-0.3, z:-1.0, color:0x9bbf8a, phase:4.8, size:1.16 },
   ];
 
   // ================= THREE.JS =================
@@ -510,7 +512,7 @@ updateCamera();
 
   function fitCamera(){
     const aspect = stageEl.clientWidth / stageEl.clientHeight;
-    const half = Math.max(4.2, 6.6 / aspect); // keeps all islands in view on narrow phones too
+    const half = Math.max(4.7, 7.2 / aspect); // full-screen framing with room for the larger islands
     camera.left = -half*aspect; camera.right = half*aspect;
     camera.top = half; camera.bottom = -half;
     camera.updateProjectionMatrix();
@@ -644,7 +646,10 @@ updateCamera();
     ig.add(hit);
 
     // soft shadow on the cloud layer
-    const sh = new THREE.Mesh(new THREE.CircleGeometry(0.9,20), new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.1 }));
+    const sh = new THREE.Mesh(
+      new THREE.CircleGeometry(0.9 * (st.size || 1), 20),
+      new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.1 })
+    );
     sh.rotation.x = -Math.PI/2;
     sh.position.set(st.x, -3.3, st.z);
     worldGroup.add(sh);
@@ -655,16 +660,20 @@ updateCamera();
   });
   const gOf = id => islandGroups.find(g => g.id === id).group;
   // ---- floating island model replaces the placeholder rocks ----
-  const ISLAND_SCALE = 0.0125;   // make bigger or smaller here
+  // Larger base size + per-station size multipliers.
+  // Increase ISLAND_SCALE if you want the whole world even chunkier.
+  const ISLAND_SCALE = 0.0155;
   new THREE.GLTFLoader().load('floating_island.glb', gltf => {
     const model = gltf.scene;
-    model.scale.setScalar(ISLAND_SCALE);
     model.position.set(0.025, 0, 0.15);                 // centres the island
     islandGroups.forEach(g => {
+      const st = STATIONS.find(s => s.id === g.id);
       const pivot = new THREE.Group();
-      pivot.add(model.clone(true));
+      const island = model.clone(true);
+      island.scale.setScalar(ISLAND_SCALE * (st?.size || 1));
+      pivot.add(island);
       pivot.rotation.y = Math.PI;                       // open grass faces the rail
-      pivot.position.y = ISLAND_TOP_Y - 46 * ISLAND_SCALE;
+      pivot.position.y = ISLAND_TOP_Y - 46 * ISLAND_SCALE * (st?.size || 1);
       g.group.add(pivot);
     });
     rocks.forEach(r => r.parent && r.parent.remove(r));
@@ -688,7 +697,13 @@ updateCamera();
 
   function updateTrack(){
     islandGroups.forEach((g, i) => {
-      trackPts[i].set(g.group.position.x, g.group.position.y + RAIL_Y, g.group.position.z + TRACK_Z);
+      const st = STATIONS[i];
+      const railOffset = TRACK_Z * (st.size || 1);
+      trackPts[i].set(
+        g.group.position.x,
+        g.group.position.y + RAIL_Y,
+        g.group.position.z + railOffset
+      );
     });
     for(let i = 0; i < N_SLEEP; i++){
       const u = i / (N_SLEEP - 1);
